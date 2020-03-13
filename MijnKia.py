@@ -21,7 +21,7 @@ import logging
 import urllib
 
 ######### Variables ########
-bTestRun = True
+bTestRun = False
 
 LoginUrl = 'https://www.kia.com/nl/mijnkia/'
 url = 'https://www.kia.com/nl/webservices/mykia/connectedcar.asmx/GetCanbusData'
