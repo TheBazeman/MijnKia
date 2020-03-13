@@ -40,10 +40,10 @@ RestartSec = 30<br>
 WantedBy = multi-user.target<br>
 _EOF_<br>
 <br>
-systemctl enable MijnKia.service
-systemctl daemon-reload
-service MijnKia status
-
+systemctl enable MijnKia.service<br>
+systemctl daemon-reload<br>
+service MijnKia status<br>
+<br>
 
 Have fun with it :-) -Bas
 
