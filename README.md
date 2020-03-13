@@ -2,43 +2,43 @@ Python MijnKia E-Niro model 2019 get statistics from MijnKia App and send them t
 
 Install the script and ini file in path "/MijnKia/" or change the "inifilepath" parameter in the script and the path in below example service file. Otherwise it cannot find the ini file with your settings for MijnKia/InfluxDB/ABRP/Openweathermap and the service wont start.
 
-The settings to be specified in the inifile:
-[MijnKia]
-loginEmail=[email address to login to MijnKia] [required]
-LoginPassword=[password for MijnKia] [required]
+The settings to be specified in the inifile:<br>
+[MijnKia]<br>
+loginEmail=[email address to login to MijnKia] [required]<br>
+LoginPassword=[password for MijnKia] [required]<br>
+<br>
+[Influx]<br>
+InfluxDBServer=[FQDN or ip address] [optional]<br>
+InfluxDB=[DB name to put the data in] [optional]<br>
+<br>
+[ABetterRoutePlanner]<br>
+abrp_token=[Login to ABRP website, setup live data, choose Torque Pro and find the field with the email ID, looks like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx]  [optional]<br>
+car_model=kia:niro:19:64:other<br>
+ProvideLocationToABRP=NO [To provide the location of the car to ABRP specify YES. Better to override it in the app and use your phone's location which updates far more frequently]  [optional]<br>
+OpenWeatherMapAPIKey=[Register an account on OpenWeatherMap and get API Key] [optional]<br>
+<br>
 
-[Influx]
-InfluxDBServer=[FQDN or ip address] [optional]
-InfluxDB=[DB name to put the data in] [optional]
 
-[ABetterRoutePlanner]
-abrp_token=[Login to ABRP website, setup live data, choose Torque Pro and find the field with the email ID, looks like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx]  [optional]
-car_model=kia:niro:19:64:other
-ProvideLocationToABRP=NO [To provide the location of the car to ABRP specify YES. Better to override it in the app and use your phone's location which updates far more frequently]  [optional]
-OpenWeatherMapAPIKey=[Register an account on OpenWeatherMap and get API Key] [optional]
+I have created a service for it with the following:<br>
+####################### MijnKia.py starten ###########################<br>
+sudo tee -a /lib/systemd/system/MijnKia.service <<_EOF_<br>
+[Unit]<br>
+Description = MijnKia service<br>
+After = network-online.target<br>
+Wants = network-online.target<br>
 
-
-
-I have created a service for it with the following (use the raw view to copy): 
-####################### MijnKia.py starten ###########################
-sudo tee -a /lib/systemd/system/MijnKia.service <<_EOF_
-[Unit]
-Description = MijnKia service
-After = network-online.target
-Wants = network-online.target
-
-[Service]
-User = root
-Group = root
-Type = simple
-ExecStart = /usr/bin/python /MijnKia/MijnKia.py
-Restart = on-failure
-RestartSec = 30
-
-[Install]
-WantedBy = multi-user.target
-_EOF_
-
+[Service]<br>
+User = root<br>
+Group = root<br>
+Type = simple<br>
+ExecStart = /usr/bin/python /MijnKia/MijnKia.py<br>
+Restart = on-failure<br>
+RestartSec = 30<br>
+<br>
+[Install]<br>
+WantedBy = multi-user.target<br>
+_EOF_<br>
+<br>
 systemctl enable MijnKia.service
 systemctl daemon-reload
 service MijnKia status
