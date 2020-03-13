@@ -1,5 +1,5 @@
-<strong>Python MijnKia E-Niro model 2019 get statistics from MijnKia App</strong><br>
-and send stats to InfluxDB and/or ABRP (including weather info)
+<center><strong>Python MijnKia E-Niro model 2019 get statistics from MijnKia App</strong></center><br>
+Send stats to InfluxDB and/or ABRP (including weather info)
 
 Install the script and ini file in path "/MijnKia/" or change the "filepath" parameter in the script and the path in below example service file. Otherwise it cannot find the ini file with your settings for MijnKia/InfluxDB/ABRP/Openweathermap and the service wont start.
 
