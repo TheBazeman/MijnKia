@@ -11,6 +11,8 @@
 # Added external temp based on Kia geo coordinates for ABetterRoutePlanner
 
 # When missing a module, please install with "pip"
+# I am running this script on Ubuntu in a VM
+
 import requests
 import json
 import configparser
@@ -132,6 +134,9 @@ def SendABRPtelemetry(MijnKiaWaarden):
         
 
 ##### Actual Script #####
+if sys.version_info[0] != 2:
+    raise Exception("Programmed and tested with Python 2, please use python version 2")
+
 print("Logging in on www.kia.com/nl/mijnkia/....")
 session = requests.Session()
 response = session.post(LoginUrl, headers = myLoginHeaders, data = myLoginData)
