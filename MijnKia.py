@@ -145,7 +145,8 @@ else:
     print("ERROR logging in on www.kia.com/nl/mijnkia/, exiting and and please try again....")
     raise ERROR("ERROR logging in on www.kia.com/nl/mijnkia/")
 
-RangePrevious = ''    
+RangePrevious = ''
+PollerCounter = 0    
 while True:
     #HTTPresponse = requests.post(url, headers = myHeaders)
     HTTPresponse = requests.post(url, cookies=myKiaDashboardCookies)
@@ -207,12 +208,17 @@ while True:
 
     sys.stdout.flush() #Flush console output for realtime message in service status
     
-    if (HTTPresponse.json()['CanbusLast']['Range'] == RangePrevious):
-        print("Car is not moving or charging, waiting 300s for new poll so the Kia server's wont get stressed out")
-        sys.stdout.flush() #Flush console output for realtime message in service status
-        time.sleep(300)
+    if ((HTTPresponse.json()['CanbusLast']['Range'] == RangePrevious) and HTTPresponse.json()['CanbusLast']['ev']['charging'] == False):
+        PollerCounter += 1
+        if (PollerCounter > 5): #After 5 mins go back to larger polling interval
+            print("Car is not moving or charging, waiting 300s for new poll so the Kia server's wont get stressed out")
+            sys.stdout.flush() #Flush console output for realtime message in service status
+            time.sleep(300)
+        else:
+            time.sleep(60) # Faster makes no sense because the Kia uploads once a minute
     else:
         time.sleep(60) # Faster makes no sense because the Kia uploads once a minute
+        PollerCounter = 0
 
     RangePrevious = HTTPresponse.json()['CanbusLast']['Range']
     print("--------------------------------")
