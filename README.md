@@ -3,6 +3,8 @@ Send stats to InfluxDB for graphing with Grafana and/or ABRP (including weather 
 <br>
 Install the script and ini file in path "/MijnKia/" or change the "filepath" parameter in the script and the path in below example service file. Otherwise it cannot find the ini file with your settings for MijnKia/InfluxDB/ABRP/Openweathermap and the service wont start.
 
+Programmed and tested with Python2.
+
 The settings to be specified in the inifile:<br>
 [MijnKia]<br>
 loginEmail=[email address to login to MijnKia] [required]<br>
