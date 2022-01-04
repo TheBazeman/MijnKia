@@ -29,7 +29,7 @@ bTestRun = False
 LoginUrl = 'https://www.kia.com/nl/mijnkia/'
 url = 'https://www.kia.com/nl/webservices/mykia/connectedcar.asmx/GetCanbusData'
 
-MijnKiaINIFilePath = "/MijnKia/MijnKia.ini"
+MijnKiaINIFilePath = "/home/pi/gits/MijnKia/MijnKia.ini"
 MijnKiaINIFile = configparser.ConfigParser() #Read ini file for meters
 MijnKiaINIFile.read(MijnKiaINIFilePath)
 
@@ -218,6 +218,11 @@ while True:
 
             if MijnKiaINIFile["MQTT"]["username"]:
                 client.username_pw_set(username=MijnKiaINIFile["MQTT"]["username"],password=MijnKiaINIFile["MQTT"]["password"])
+            
+            if MijnKiaINIFile["MQTT"]["mainTopic"]:
+                mainTopic = MijnKiaINIFile["MQTT"]["mainTopic"] + "/"
+            else:
+                mainTopic = ''
 
             client.connect(MijnKiaINIFile["MQTT"]["host"], int(MijnKiaINIFile["MQTT"]["port"]), 60)
             print("Successfully connected to MQTT")
@@ -229,7 +234,7 @@ while True:
                     for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
                         #print(attribute + "/" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
                         MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
-                        client.publish("MijnKia/" + attribute + "/" + subattribute, str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])))
+                        client.publish(mainTopic + attribute + "/" + subattribute, str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])))
                         
                 else:
                     #print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
@@ -237,7 +242,7 @@ while True:
                     if mqttData is None:
                         mqttData = "None"
 
-                    client.publish("MijnKia/" + attribute, mqttData)
+                    client.publish(mainTopic + attribute, mqttData)
 
                     if HTTPresponse.json()['CanbusLast'][attribute] == None:
                         MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
