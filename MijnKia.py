@@ -21,7 +21,6 @@ import sys
 from pprint import pprint
 import logging
 import urllib
-import paho.mqtt.client as mqtt
 
 ######### Variables ########
 bTestRun = False
@@ -212,6 +211,7 @@ while True:
             requestsSession.close()
         if (MijnKiaINIFile["MQTT"]["host"]):
             print("Attempting to connect to MQTT")
+            import paho.mqtt.client as mqtt
             client = mqtt.Client()
             client.on_connect = on_connect
             client.on_message = on_message
@@ -249,6 +249,22 @@ while True:
                     else:
                         MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
             print("Successfully published to MQTT")
+        else:
+            print("Ini file does not contain Influx or MQTT data, outputting vehicle data to screen")
+
+            for attribute in HTTPresponse.json()['CanbusLast']:
+                if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
+                    continue
+                if type(HTTPresponse.json()['CanbusLast'][attribute]) == type(dict()):
+                    for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
+                        print(attribute + ":\t" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
+                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
+                else:
+                    print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
+                    if HTTPresponse.json()['CanbusLast'][attribute] == None:
+                        MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
+                    else:
+                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
     else:
         print("ERROR: HTTP request to Kia went wrong!")
         print(HTTPresponse)
