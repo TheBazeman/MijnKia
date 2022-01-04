@@ -29,7 +29,7 @@ bTestRun = False
 LoginUrl = 'https://www.kia.com/nl/mijnkia/'
 url = 'https://www.kia.com/nl/webservices/mykia/connectedcar.asmx/GetCanbusData'
 
-MijnKiaINIFilePath = "/home/pi/gits/MijnKia/MijnKia.ini"
+MijnKiaINIFilePath = "/MijnKia/MijnKia.ini"
 MijnKiaINIFile = configparser.ConfigParser() #Read ini file for meters
 MijnKiaINIFile.read(MijnKiaINIFilePath)
 
