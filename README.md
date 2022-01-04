@@ -25,6 +25,7 @@ host=[broker hostname or IP]<br>
 port=[prot used to connect to broker. the default is 1883]<br>
 username=[username to connect to broker] [optional]<br>
 password=[password to connect to broker] [optional]<br>
+mainTopic=[Name for the main topic to hold returned data] [optional]<br>
 
 
 I have created a service for it with the following:<br>
