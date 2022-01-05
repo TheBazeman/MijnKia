@@ -28,11 +28,9 @@ bTestRun = False
 LoginUrl = 'https://www.kia.com/nl/mijnkia/'
 url = 'https://www.kia.com/nl/webservices/mykia/connectedcar.asmx/GetCanbusData'
 
-MijnKiaINIFilePath = "/MijnKia/MijnKia.ini"
+MijnKiaINIFilePath = "/home/pi/gits/MijnKia/MijnKia.ini"
 MijnKiaINIFile = configparser.ConfigParser() #Read ini file for meters
 MijnKiaINIFile.read(MijnKiaINIFilePath)
-
-write_url_string = 'http://' + MijnKiaINIFile["Influx"]["InfluxDBServer"] + ':8086/write?db=' + MijnKiaINIFile["Influx"]["InfluxDB"] # + '&precision=s'
 
 myLoginData = {'__EVENTTARGET': 'ctl00$cphMain$phmain_1$lbSend','ctl00$cphMain$phmain_1$email': MijnKiaINIFile["MijnKia"]["loginEmail"],'ctl00$cphMain$phmain_1$password': MijnKiaINIFile["MijnKia"]["LoginPassword"]}
 myLoginHeaders = {'user-agent':'Mozilla/5.0 (Linux; Android 7.0; SM-G892A Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/60.0.3112.107 Mobile Safari/537.36 gonative'}
@@ -58,7 +56,6 @@ def GetLocationWeather(CarLattitude,CarLongitude):
     if (r.status_code == 200):
         print("Temp: " + str(r.json()['main']['temp']) + " Celcius, Wind: " + str(r.json()['wind']['speed']) + " m/s, Wind direction: " + str(r.json()['wind']['deg']) + " degrees (meteorological), Weather: " + r.json()['weather'][0]["main"])
         return {'OutsideTemp':r.json()['main']['temp']}
-
 
 def SendABRPtelemetry(MijnKiaWaarden):
     ####### Report telemetry to ABRP ########
@@ -132,7 +129,16 @@ def SendABRPtelemetry(MijnKiaWaarden):
     
     return requests.get('https://api.iternio.com/1/tlm/send?'+urllib.urlencode(params))
         
+def on_connect(client, userdata, flags, rc):
+    print("MQTT connected with result code "+str(rc))
 
+    # Subscribing in on_connect() means that if we lose the connection and
+    # reconnect then subscriptions will be renewed.
+    client.subscribe("$SYS/#")
+
+def on_message(client, userdata, msg):
+    # The callback for when a PUBLISH message is received from the server.
+    print(msg.topic+" "+str(msg.payload))
 ##### Actual Script #####
 if sys.version_info[0] != 2:
     raise Exception("Programmed and tested with Python 2, please use python version 2")
@@ -165,6 +171,9 @@ while True:
 
     if (HTTPresponse.status_code == 200):
         if ((MijnKiaINIFile["Influx"]["InfluxDBServer"]) and (MijnKiaINIFile["Influx"]["InfluxDB"])):
+            print("Attempting to write to Influx")
+            write_url_string = 'http://' + MijnKiaINIFile["Influx"]["InfluxDBServer"] + ':8086/write?db=' + MijnKiaINIFile["Influx"]["InfluxDB"] # + '&precision=s'
+
             for attribute in HTTPresponse.json()['CanbusLast']:
                 if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
                     continue
@@ -200,6 +209,62 @@ while True:
                 else:
                     print("Succesfully wrote values to InfluxDB.")
             requestsSession.close()
+        if (MijnKiaINIFile["MQTT"]["host"]):
+            print("Attempting to connect to MQTT")
+            import paho.mqtt.client as mqtt
+            client = mqtt.Client()
+            client.on_connect = on_connect
+            client.on_message = on_message
+
+            if MijnKiaINIFile["MQTT"]["username"]:
+                client.username_pw_set(username=MijnKiaINIFile["MQTT"]["username"],password=MijnKiaINIFile["MQTT"]["password"])
+            
+            if MijnKiaINIFile["MQTT"]["mainTopic"]:
+                mainTopic = MijnKiaINIFile["MQTT"]["mainTopic"] + "/"
+            else:
+                mainTopic = ''
+
+            client.connect(MijnKiaINIFile["MQTT"]["host"], int(MijnKiaINIFile["MQTT"]["port"]), 60)
+            print("Successfully connected to MQTT")
+
+            for attribute in HTTPresponse.json()['CanbusLast']:
+                if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
+                    continue
+                if type(HTTPresponse.json()['CanbusLast'][attribute]) == type(dict()):
+                    for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
+                        #print(attribute + "/" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
+                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
+                        client.publish(mainTopic + attribute + "/" + subattribute, str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])))
+                        
+                else:
+                    #print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
+                    mqttData = str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute]))
+                    if mqttData is None:
+                        mqttData = "None"
+
+                    client.publish(mainTopic + attribute, mqttData)
+
+                    if HTTPresponse.json()['CanbusLast'][attribute] == None:
+                        MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
+                    else:
+                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
+            print("Successfully published to MQTT")
+        else:
+            print("Ini file does not contain Influx or MQTT data, outputting vehicle data to screen")
+
+            for attribute in HTTPresponse.json()['CanbusLast']:
+                if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
+                    continue
+                if type(HTTPresponse.json()['CanbusLast'][attribute]) == type(dict()):
+                    for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
+                        print(attribute + ":\t" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
+                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
+                else:
+                    print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
+                    if HTTPresponse.json()['CanbusLast'][attribute] == None:
+                        MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
+                    else:
+                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
     else:
         print("ERROR: HTTP request to Kia went wrong!")
         print(HTTPresponse)
