@@ -22,20 +22,21 @@ from pprint import pprint
 import logging
 import urllib
 
-######### Variables ########
+#region ######### Variables ########
 bTestRun = False
-
-LoginUrl = 'https://www.kia.com/nl/mijnkia/'
-url = 'https://www.kia.com/nl/webservices/mykia/connectedcar.asmx/GetCanbusData'
+python2Only = False
 
 MijnKiaINIFilePath = "/home/pi/gits/MijnKia/MijnKia.ini"
 MijnKiaINIFile = configparser.ConfigParser() #Read ini file for meters
 MijnKiaINIFile.read(MijnKiaINIFilePath)
 
-myLoginData = {'__EVENTTARGET': 'ctl00$cphMain$phmain_1$lbSend','ctl00$cphMain$phmain_1$email': MijnKiaINIFile["MijnKia"]["loginEmail"],'ctl00$cphMain$phmain_1$password': MijnKiaINIFile["MijnKia"]["LoginPassword"]}
-myLoginHeaders = {'user-agent':'Mozilla/5.0 (Linux; Android 7.0; SM-G892A Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/60.0.3112.107 Mobile Safari/537.36 gonative'}
+LoginUrl = 'https://www.mijnkia.nl/api/user/login'
+deviceUrl = 'https://www.mijnkia.nl/api/vehicle/' + MijnKiaINIFile["MijnKia"]["preferredVehicleId"] + '/connected-status'
+upcomingAppointmentsUrl = 'https://www.mijnkia.nl/api/vehicle/' + MijnKiaINIFile["MijnKia"]["preferredVehicleId"] + '/appointment'
+pastAppointmentsUrl = 'https://www.mijnkia.nl/api/vehicle/' + MijnKiaINIFile["MijnKia"]["preferredVehicleId"] + '/appointment/contact-moments'
+#endregion
 
-########## Functions ##########
+#region ########## Functions ##########
 def ConvertIfBool(value):
     if type(value) == bool:
         if value:
@@ -139,55 +140,72 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     # The callback for when a PUBLISH message is received from the server.
     print(msg.topic+" "+str(msg.payload))
+
+#endregion
+
 ##### Actual Script #####
-if sys.version_info[0] != 2:
+if python2Only and sys.version_info[0] != 2:
     raise Exception("Programmed and tested with Python 2, please use python version 2")
 
-print("Logging in on www.kia.com/nl/mijnkia/....")
+print("Logging in on " + LoginUrl + "....")
 session = requests.Session()
-response = session.post(LoginUrl, headers = myLoginHeaders, data = myLoginData)
+response = session.post(LoginUrl, json={"username": MijnKiaINIFile["MijnKia"]["loginEmail"],"password": MijnKiaINIFile["MijnKia"]["LoginPassword"]})
 if bTestRun:
     print(session.cookies.get_dict())
 if (response.status_code == 200) and (session.cookies.get_dict()):
-    print("Successfully logged in on www.kia.com/nl/mijnkia/, caching cookies and gather stats of car....")
+    print("Successfully logged in on " + LoginUrl + ", caching cookies and gather stats of car....")
     myKiaDashboardCookies = session.cookies.get_dict()
     session.close()
 else:
-    print("ERROR logging in on www.kia.com/nl/mijnkia/, exiting and and please try again....")
-    raise ERROR("ERROR logging in on www.kia.com/nl/mijnkia/")
+    print("ERROR logging in on" + LoginUrl + ", exiting and and please try again....")
+    raise Exception("ERROR logging in on " + LoginUrl)
+
+# Create headers
+myHeaders = {"cookie" : "KIA-AUTH=" + myKiaDashboardCookies['KIA-AUTH'] + "; AWSALB=" + myKiaDashboardCookies['AWSALB'] + "; AWSALBCORS=" + myKiaDashboardCookies['AWSALBCORS']}
 
 RangePrevious = ''
 PollerCounter = 0    
 while True:
-    #HTTPresponse = requests.post(url, headers = myHeaders)
-    HTTPresponse = requests.post(url, cookies=myKiaDashboardCookies)
+    HTTPresponse = requests.get(deviceUrl, headers = myHeaders)
     
     MeterValues = ''
 
     if bTestRun:
         print(HTTPresponse)
-        print(HTTPresponse.json())
+        print(HTTPresponse.text)
         print(HTTPresponse.status_code)
 
     if (HTTPresponse.status_code == 200):
+        # convert to JSON object
+        json_object = json.loads(HTTPresponse.text)
+
+        if MijnKiaINIFile["Config"]["upcomingAppointments"].lower() == 'true':
+            upcomingAppointmentsUrlResp = requests.get(upcomingAppointmentsUrl, headers=myHeaders)
+            upcomingAppointments_json = json.loads(upcomingAppointmentsUrlResp.text)
+            json_object["data"]["upcomingAppointments"] = upcomingAppointments_json["data"]
+
+        if MijnKiaINIFile["Config"]["pastAppointments"].lower() == 'true':
+            pastAppointmentsUrlResp = requests.get(pastAppointmentsUrl, headers=myHeaders)
+            pastAppointments_json = json.loads(pastAppointmentsUrlResp.text)
+            json_object["data"]["pastAppointments"] = pastAppointments_json["data"]
+
         if ((MijnKiaINIFile["Influx"]["InfluxDBServer"]) and (MijnKiaINIFile["Influx"]["InfluxDB"])):
             print("Attempting to write to Influx")
             write_url_string = 'http://' + MijnKiaINIFile["Influx"]["InfluxDBServer"] + ':8086/write?db=' + MijnKiaINIFile["Influx"]["InfluxDB"] # + '&precision=s'
 
-            for attribute in HTTPresponse.json()['CanbusLast']:
+            for attribute in json_object['data']:
                 if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
                     continue
-                if type(HTTPresponse.json()['CanbusLast'][attribute]) == type(dict()):
-                    for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
-                        print(attribute + ":\t" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
-                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
+                if type(json_object['data'][attribute]) == type(dict()):
+                    for subattribute in json_object['data'][attribute]:
+                        print(attribute + ":\t" + subattribute + ": " + str(json_object['data'][attribute][subattribute]))
+                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(json_object['data'][attribute][subattribute])) + '\n'
                 else:
-                    print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
-                    #print(type(HTTPresponse.json()['CanbusLast'][attribute]))
-                    if HTTPresponse.json()['CanbusLast'][attribute] == None:
-                        MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
+                    print(attribute + ":\t" + str(json_object['data'][attribute]))
+                    if json_object['data'][attribute] == None:
+                        MeterValues += 'Main ' + attribute + '="' + str(json_object['data'][attribute]) + '"\n'
                     else:
-                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
+                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(json_object['data'][attribute])) + '\n'
             #Writing values to InfluxDB
             requestsSession = requests.Session()
             if bTestRun:
@@ -209,6 +227,7 @@ while True:
                 else:
                     print("Succesfully wrote values to InfluxDB.")
             requestsSession.close()
+        
         if (MijnKiaINIFile["MQTT"]["host"]):
             print("Attempting to connect to MQTT")
             import paho.mqtt.client as mqtt
@@ -227,58 +246,70 @@ while True:
             client.connect(MijnKiaINIFile["MQTT"]["host"], int(MijnKiaINIFile["MQTT"]["port"]), 60)
             print("Successfully connected to MQTT")
 
-            for attribute in HTTPresponse.json()['CanbusLast']:
+            for attribute in json_object['data']:
                 if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
                     continue
-                if type(HTTPresponse.json()['CanbusLast'][attribute]) == type(dict()):
-                    for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
-                        #print(attribute + "/" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
-                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
-                        client.publish(mainTopic + attribute + "/" + subattribute, str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])))
+                if type(json_object['data'][attribute]) == type(dict()):
+                    for subattribute in json_object['data'][attribute]:
+                        if type(json_object['data'][attribute][subattribute]) == type(list()):
+                            if json_object['data'][attribute][subattribute]:
+                                for i, x in enumerate(json_object["data"][attribute][subattribute]):
+                                    for subsubattribute in x:
+                                        client.publish(mainTopic + attribute + "/" + str(i) + "/" + subsubattribute, str(ConvertIfBool(x[subsubattribute])))
+                        else:
+                            MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(json_object['data'][attribute][subattribute])) + '\n'
+                            client.publish(mainTopic + attribute + "/" + subattribute, str(ConvertIfBool(json_object['data'][attribute][subattribute])))
+                        
+                            
+                elif type(json_object['data'][attribute]) == type(list()):
+                    for i, x in enumerate(json_object["data"][attribute]):
+                        for subattribute in x:
+                            client.publish(mainTopic + attribute + "/" + str(i) + "/" + subattribute, str(ConvertIfBool(x[subattribute])))
                         
                 else:
-                    #print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
-                    mqttData = str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute]))
+                    #print(attribute + ":\t" + str(json_object['data'][attribute]))
+                    mqttData = str(ConvertIfBool(json_object['data'][attribute]))
                     if mqttData is None:
                         mqttData = "None"
 
                     client.publish(mainTopic + attribute, mqttData)
 
-                    if HTTPresponse.json()['CanbusLast'][attribute] == None:
-                        MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
+                    if json_object['data'][attribute] == None:
+                        MeterValues += 'Main ' + attribute + '="' + str(json_object['data'][attribute]) + '"\n'
                     else:
-                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
+                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(json_object['data'][attribute])) + '\n'
             print("Successfully published to MQTT")
-        else:
-            print("Ini file does not contain Influx or MQTT data, outputting vehicle data to screen")
+        
+        if bTestRun:
+            print("Outputting vehicle data to screen")
 
-            for attribute in HTTPresponse.json()['CanbusLast']:
+            for attribute in json_object['data']:
                 if attribute == "colors" or attribute == "propulsion": #Skip values, not needed
                     continue
-                if type(HTTPresponse.json()['CanbusLast'][attribute]) == type(dict()):
-                    for subattribute in HTTPresponse.json()['CanbusLast'][attribute]:
-                        print(attribute + ":\t" + subattribute + ": " + str(HTTPresponse.json()['CanbusLast'][attribute][subattribute])).expandtabs(20)
-                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute][subattribute])) + '\n'
+                if type(json_object['data'][attribute]) == type(dict()):
+                    for subattribute in json_object['data'][attribute]:
+                        print(attribute + ":\t" + subattribute + ": " + str(json_object['data'][attribute][subattribute]))
+                        MeterValues += attribute + ' ' + subattribute + '=' + str(ConvertIfBool(json_object['data'][attribute][subattribute])) + '\n'
                 else:
-                    print(attribute + ":\t" + str(HTTPresponse.json()['CanbusLast'][attribute]) + "  (" + str(type(HTTPresponse.json()['CanbusLast'][attribute])) + ")").expandtabs(20)
-                    if HTTPresponse.json()['CanbusLast'][attribute] == None:
-                        MeterValues += 'Main ' + attribute + '="' + str(HTTPresponse.json()['CanbusLast'][attribute]) + '"\n'
+                    print(attribute + ":\t" + str(json_object['data'][attribute]))
+                    if json_object['data'][attribute] == None:
+                        MeterValues += 'Main ' + attribute + '="' + str(json_object['data'][attribute]) + '"\n'
                     else:
-                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(HTTPresponse.json()['CanbusLast'][attribute])) + '\n'
+                        MeterValues += 'Main ' + attribute + '=' + str(ConvertIfBool(json_object['data'][attribute])) + '\n'
     else:
         print("ERROR: HTTP request to Kia went wrong!")
         print(HTTPresponse)
-        raise ERROR("ERROR: HTTP request to Kia CanbusLast stats went wrong!")
+        raise Exception("ERROR: HTTP request to Kia CanbusLast stats went wrong!")
 
     if ((MijnKiaINIFile["ABetterRoutePlanner"]["abrp_token"]) and (MijnKiaINIFile["ABetterRoutePlanner"]["car_model"])):
-        if (SendABRPtelemetry(HTTPresponse.json()['CanbusLast']).status_code == 200):
+        if (SendABRPtelemetry(json_object['data']).status_code == 200):
             print("Succesfully wrote values to ABetterRoutePlanner API.")
         else:
             print("ERROR: HTTP request to ABetterRoutePlanner went wrong!")
 
     sys.stdout.flush() #Flush console output for realtime message in service status
     
-    if ((HTTPresponse.json()['CanbusLast']['Range'] == RangePrevious) and HTTPresponse.json()['CanbusLast']['ev']['charging'] == False):
+    if ((json_object['data']['range'] == RangePrevious) and json_object['data']['evInfo']['isCharging'] == False):
         PollerCounter += 1
         if (PollerCounter > 5): #After 5 mins go back to larger polling interval
             print("Car is not moving or charging, waiting 300s for new poll so the Kia server's wont get stressed out")
@@ -290,5 +321,5 @@ while True:
         time.sleep(60) # Faster makes no sense because the Kia uploads once a minute
         PollerCounter = 0
 
-    RangePrevious = HTTPresponse.json()['CanbusLast']['Range']
+    RangePrevious = json_object['data']['range']
     print("--------------------------------")
