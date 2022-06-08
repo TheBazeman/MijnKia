@@ -10,6 +10,10 @@
 # Added support for ABetterRoutePlanner through Internio API based on https://github.com/plord12/autopi-tools/blob/master/my_abrp.py
 # Added external temp based on Kia geo coordinates for ABetterRoutePlanner
 
+# Version 1.1 - Updated by JahFyahh for using new URL and adding MQTT
+
+# Version 1.2 - Updated by Bas Bahlmann for fixing use of InfluxDB and ABRP
+
 # When missing a module, please install with "pip"
 # I am running this script on Ubuntu in a VM
 
@@ -26,7 +30,7 @@ import urllib
 bTestRun = False
 python2Only = False
 
-MijnKiaINIFilePath = "/home/pi/gits/MijnKia/MijnKia.ini"
+MijnKiaINIFilePath = "/MijnKia/MijnKia.ini"
 MijnKiaINIFile = configparser.ConfigParser() #Read ini file for meters
 MijnKiaINIFile.read(MijnKiaINIFilePath)
 
@@ -80,7 +84,7 @@ def SendABRPtelemetry(MijnKiaWaarden):
     data['utc'] = time.time()
 
     # soc - State of Charge of the battery in percent (100 = fully charged battery)
-    data['soc'] = MijnKiaWaarden["ev"]["soc"]
+    data['soc'] = MijnKiaWaarden["evInfo"]["chargeLevel"]
 
     # speed - Speed of the car in km/h (GPS or OBD)
     # data['speed'] = get_speed()
@@ -94,7 +98,7 @@ def SendABRPtelemetry(MijnKiaWaarden):
         data['lon'] = MijnKiaWaarden["position"]["Longitude"]
 
     # is_charging -  1 or 0, 1 = charging, 0 = driving
-    data['is_charging'] = ConvertIfBool(MijnKiaWaarden["ev"]["charging"])
+    data['is_charging'] = ConvertIfBool(MijnKiaWaarden["evInfo"]["isCharging"])
 
     # car_model - for list see https://api.iternio.com/1/tlm/get_carmodels_list?api_key=6f6a554f-d8c8-4c72-8914-d5895f58b1eb
     data['car_model'] = MijnKiaINIFile["ABetterRoutePlanner"]["car_model"]
@@ -108,7 +112,7 @@ def SendABRPtelemetry(MijnKiaWaarden):
 
     # power - Power output (input is negative) of the battery in kW
     #data['power'] = data['current']*data['voltage']/1000.0
-    #data['power'] = float(MijnKiaWaarden["ev"]["soc"])/100*64/int(MijnKiaWaarden["Range"])
+    #data['power'] = float(MijnKiaWaarden["evInfo"]["chargeLevel"])/100*64/int(MijnKiaWaarden["Range"])
     
     # soh - State of Health of the battery in percent (100 = fully healthy battery)
     #data['soh'] = get_soh()
@@ -118,7 +122,7 @@ def SendABRPtelemetry(MijnKiaWaarden):
 
     if (MijnKiaINIFile["ABetterRoutePlanner"]["OpenWeatherMapAPIKey"]):
         # ext_temp - External temperature in Celsius
-        data['ext_temp'] = GetLocationWeather(MijnKiaWaarden["position"]["Lattitude"],MijnKiaWaarden["position"]["Longitude"])['OutsideTemp']
+        data['ext_temp'] = GetLocationWeather(MijnKiaWaarden["position"]["latitude"],MijnKiaWaarden["position"]["longitude"])['OutsideTemp']
 
     # batt_temp - Battery temperature in Celsius
     #data['batt_temp'] = get_batterytemp()
