@@ -14,6 +14,8 @@
 
 # Version 1.2 - Updated by Bas Bahlmann for fixing use of InfluxDB and ABRP
 
+# Version 1.3 - Updated by Bas Bahlmann for fixing location for ABRP
+
 # When missing a module, please install with "pip"
 # I am running this script on Ubuntu in a VM
 
@@ -92,10 +94,10 @@ def SendABRPtelemetry(MijnKiaWaarden):
 
     if (MijnKiaINIFile["ABetterRoutePlanner"]["ProvideLocationToABRP"] == "YES"):
         # lat - User's current latitude
-        data['lat'] = MijnKiaWaarden["position"]["Lattitude"]
+        data['lat'] = MijnKiaWaarden["position"]["latitude"]
 
         # lon - User's current longitude
-        data['lon'] = MijnKiaWaarden["position"]["Longitude"]
+        data['lon'] = MijnKiaWaarden["position"]["longitude"]
 
     # is_charging -  1 or 0, 1 = charging, 0 = driving
     data['is_charging'] = ConvertIfBool(MijnKiaWaarden["evInfo"]["isCharging"])
